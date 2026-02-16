@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>MagicCalc - 魔术计算器</title>
+    <style>
+        /* ============================================
+           iOS 深色模式计算器样式
+           使用 CSS 变量确保一致性
+           ============================================ */
+        :root {
+            /* 色彩系统 - 深度黑灰背景配橙色强调 */
+            --bg-display: #000000;
+            --bg-calculator: #000000;
+            --btn-gray-dark: #333333;
+            --btn-gray-light: #a5a5a5;
+            --btn-orange: #ff9f0a;
+            --btn-orange-active: #f5821f;
+            --text-white: #ffffff;
+            --text-black: #000000;
+            --text-orange: #ff9f0a;
+
+            /* 圆角系统 */
+            --btn-radius: 50%;
+            --display-radius: 0;
+
+            /* 字体选择 - SF Pro 是 iOS 原生字体，使用系统字体栈 */
+            --font-stack: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: var(--font-stack);
+            background-color: var(--bg-calculator);
+            color: var(--text-white);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            /* 禁止页面滚动，确保计算器固定 */
+            touch-action: manipulation;
+        }
+
+        /* 计算器主容器 */
+        .calculator {
+            width: 100%;
+            max-width: 420px;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            background-color: var(--bg-calculator);
+        }
+
+        /* ============================================
+           显示屏区域
+           ============================================ */
+        .display {
+            width: 100%;
+            height: 280px;
+            background-color: var(--bg-display);
+            display: flex;
+            justify-content: flex-end;
+            align-items: flex-end;
+            padding: 20px 30px;
+            font-size: 85px;
+            font-weight: 200;
+            letter-spacing: -2px;
+            line-height: 1;
+            color: var(--text-white);
+            word-break: break-all;
+            overflow: hidden;
+            /* 自动缩放字体以适应长数字 */
+        }
+
+        .display.shrink {
+            font-size: 50px;
+        }
+
+        .display.tiny {
+            font-size: 35px;
+        }
+
+        /* ============================================
+           按钮区域网格
+           ============================================ */
+        .buttons {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            padding: 15px;
+            background-color: var(--bg-calculator);
+        }
+
+        /* 按钮基础样式 */
+        .btn {
+            aspect-ratio: 1;
+            border: none;
+            border-radius: var(--btn-radius);
+            font-size: 32px;
+            font-weight: 400;
+            cursor: pointer;
+            transition: filter 0.1s ease;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        /* 按钮点击效果 */
+        .btn:active {
+            filter: brightness(1.3);
+        }
+
+        /* 数字按钮 - 深灰色 */
+        .btn.number {
+            background-color: var(--btn-gray-dark);
+            color: var(--text-white);
+        }
+
+        /* 0 按钮横跨两列 */
+        .btn.zero {
+            grid-column: span 2;
+            aspect-ratio: auto;
+            justify-content: flex-start;
+            padding-left: 35px;
+        }
+
+        /* 功能按钮 - 浅灰色 */
+        .btn.function {
+            background-color: var(--btn-gray-light);
+            color: var(--text-black);
+            font-size: 28px;
+        }
+
+        /* 运算符按钮 - 橙色 */
+        .btn.operator {
+            background-color: var(--btn-orange);
+            color: var(--text-white);
+            font-size: 40px;
+            font-weight: 300;
+            transition: background-color 0.15s ease;
+        }
+
+        /* 运算符被激活状态 */
+        .btn.operator.active {
+            background-color: var(--text-white);
+            color: var(--btn-orange);
+        }
+
+        /* ============================================
+           响应式设计
+           ============================================ */
+        @media (max-width: 380px) {
+            .display {
+                height: 220px;
+                font-size: 70px;
+                padding: 15px 20px;
+            }
+
+            .buttons {
+                gap: 10px;
+                padding: 10px;
+            }
+
+            .btn {
+                font-size: 28px;
+            }
+
+            .btn.operator {
+                font-size: 34px;
+            }
+
+            .btn.function {
+                font-size: 24px;
+            }
+        }
+
+        @media (min-width: 500px) {
+            .calculator {
+                border-radius: 40px;
+                overflow: hidden;
+                box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            }
+        }
+
+        /* ============================================
+           魔术模式指示灯
+           ============================================ */
+        .magic-indicator {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--btn-orange);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            z-index: 1000;
+        }
+
+        .magic-indicator.active {
+            opacity: 1;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 0.3;
+                transform: scale(1);
+            }
+            50% {
+                opacity: 1;
+                transform: scale(1.2);
+            }
+        }
+
+        /* 调试信息面板 */
+        .debug-panel {
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(51, 51, 51, 0.9);
+            color: #a5a5a5;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 11px;
+            font-family: monospace;
+            max-width: 250px;
+            display: none;
+            z-index: 1001;
+        }
+
+        .debug-panel.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <!-- 魔术模式指示灯 -->
+    <div class="magic-indicator" id="magicIndicator"></div>
+
+    <!-- 调试面板 -->
+    <div class="debug-panel" id="debugPanel"></div>
+
+    <!-- 计算器主体 -->
+    <div class="calculator">
+        <!-- 显示屏 -->
+        <div class="display" id="display">0</div>
+
+        <!-- 按钮区域 -->
+        <div class="buttons">
+            <!-- 第一行 -->
+            <button class="btn function" data-action="clear">AC</button>
+            <button class="btn function" data-action="sign">+/-</button>
+            <button class="btn function" data-action="percent">%</button>
+            <button class="btn operator" data-action="operator" data-value="/">÷</button>
+
+            <!-- 第二行 -->
+            <button class="btn number" data-value="7">7</button>
+            <button class="btn number" data-value="8">8</button>
+            <button class="btn number" data-value="9">9</button>
+            <button class="btn operator" data-action="operator" data-value="*">×</button>
+
+            <!-- 第三行 -->
+            <button class="btn number" data-value="4">4</button>
+            <button class="btn number" data-value="5">5</button>
+            <button class="btn number" data-value="6">6</button>
+            <button class="btn operator" data-action="operator" data-value="-">−</button>
+
+            <!-- 第四行 -->
+            <button class="btn number" data-value="1">1</button>
+            <button class="btn number" data-value="2">2</button>
+            <button class="btn number" data-value="3">3</button>
+            <button class="btn operator" data-action="operator" data-value="+">+</button>
+
+            <!-- 第五行 -->
+            <button class="btn number zero" data-value="0">0</button>
+            <button class="btn number" data-value=".">.</button>
+            <button class="btn operator" data-action="equals">=</button>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * ============================================
+         * MagicCalc 魔术计算器核心逻辑（新版）
+         * ============================================
+         *
+         * 状态机设计：
+         *
+         * NORMAL_MODE (0): 正常计算模式
+         *   ↓ 输入4位数，按 +
+         *
+         * MAGIC_STAGE_1 (1): 已记录 Num1（4位数）
+         *   ↓ 输入5位数，按 +
+         *
+         * MAGIC_STAGE_2 (2): 已记录 Num2（5位数）
+         *   显示 Num1 + Num2 的和
+         *   ↓ 输入6位数
+         *
+         * MAGIC_STAGE_3 (3): 已记录 Num3（6位数）
+         *   显示 Target - Num1 - Num2
+         *   ↓ 按 =
+         *
+         * FINAL_REVEAL (4): 最终呈现
+         *   显示 Target
+         *   - Target = 当前时间 + 10秒（MMDDHHmm格式）
+         *
+         * ============================================
+         */
+
+        // ============================================
+        // 状态机枚举
+        // ============================================
+        const STATES = {
+            NORMAL_MODE: 0,      // 正常计算模式
+            MAGIC_STAGE_1: 1,    // 已记录第一个数（4位）
+            MAGIC_STAGE_2: 2,    // 已记录第二个数（5位）
+            MAGIC_STAGE_3: 3,    // 已记录第三个数（6位）
+            FINAL_REVEAL: 4      // 最终呈现
+        };
+
+        // ============================================
+        // 全局状态管理器
+        // ============================================
+        const stateManager = {
+            // 当前状态机状态
+            currentState: STATES.NORMAL_MODE,
+
+            // 魔术流程存储的数据
+            magicData: {
+                num1: null,        // 第一个观众输入的 4 位数
+                num2: null,        // 第二个观众输入的 5 位数
+                num3: null,        // 第三个观众输入的 6 位数
+                target: null       // 目标时间戳（MMDDHHmm 格式，+10秒）
+            },
+
+            // 标准计算器状态
+            calculator: {
+                currentValue: '0',    // 当前输入的数字
+                previousValue: null,  // 上一个数字
+                operator: null,       // 当前运算符
+                waitingForOperand: false,  // 是否等待输入新数字
+                displayValue: '0'     // 显示屏显示的内容
+            }
+        };
+
+        // ============================================
+        // DOM 元素引用
+        // ============================================
+        const display = document.getElementById('display');
+        const magicIndicator = document.getElementById('magicIndicator');
+        const debugPanel = document.getElementById('debugPanel');
+
+        // ============================================
+        // 时间处理工具函数
+        // ============================================
+
+        /**
+         * 获取当前时间 + 10秒，格式化为 MMDDHHmm
+         * @returns {number} 8 位时间数字
+         */
+        function getTargetTime() {
+            const now = new Date();
+            // 加 10 秒
+            now.setSeconds(now.getSeconds() + 10);
+
+            const month = now.getMonth() + 1;
+            const day = now.getDate();
+            const hours = now.getHours();
+            const minutes = now.getMinutes();
+
+            // 拼接为数字：MMDDHHmm（8位）
+            const targetStr = `${String(month).padStart(2, '0')}${String(day).padStart(2, '0')}${String(hours).padStart(2, '0')}${String(minutes).padStart(2, '0')}`;
+
+            return parseInt(targetStr);
+        }
+
+        // ============================================
+        // 显示屏更新函数
+        // ============================================
+
+        /**
+         * 更新显示屏内容
+         * @param {string|number} value - 要显示的数字
+         */
+        function updateDisplay(value) {
+            let displayValue = String(value);
+
+            // 根据数字长度调整字体大小
+            display.classList.remove('shrink', 'tiny');
+
+            if (displayValue.length > 9) {
+                display.classList.add('tiny');
+            } else if (displayValue.length > 6) {
+                display.classList.add('shrink');
+            }
+
+            // 处理小数点
+            if (displayValue === '.') {
+                displayValue = '0.';
+            }
+
+            display.textContent = displayValue;
+            stateManager.calculator.displayValue = displayValue;
+        }
+
+        /**
+         * 获取当前显示屏的数字
+         * @returns {number} 数字值
+         */
+        function getDisplayNumber() {
+            return parseFloat(stateManager.calculator.displayValue);
+        }
+
+        // ============================================
+        // 状态转换函数
+        // ============================================
+
+        /**
+         * 重置计算器到初始状态
+         */
+        function resetCalculator() {
+            stateManager.currentState = STATES.NORMAL_MODE;
+            stateManager.magicData = {
+                num1: null,
+                num2: null,
+                num3: null,
+                target: null
+            };
+            stateManager.calculator = {
+                currentValue: '0',
+                previousValue: null,
+                operator: null,
+                waitingForOperand: false,
+                displayValue: '0'
+            };
+
+            updateDisplay('0');
+            clearOperatorHighlight();
+            updateMagicIndicator();
+            updateDebugPanel();
+        }
+
+        /**
+         * 清除运算符高亮
+         */
+        function clearOperatorHighlight() {
+            document.querySelectorAll('.btn.operator').forEach(btn => {
+                btn.classList.remove('active');
+            });
+        }
+
+        /**
+         * 高亮当前运算符
+         * @param {string} operator - 运算符
+         */
+        function highlightOperator(operator) {
+            clearOperatorHighlight();
+            const btn = document.querySelector(`.btn.operator[data-value="${operator}"]`);
+            if (btn) {
+                btn.classList.add('active');
+            }
+        }
+
+        /**
+         * 更新魔术模式指示灯
+         */
+        function updateMagicIndicator() {
+            // 任何魔术阶段都显示指示灯
+            if (stateManager.currentState >= STATES.MAGIC_STAGE_1 &&
+                stateManager.currentState <= STATES.MAGIC_STAGE_3) {
+                magicIndicator.classList.add('active');
+            } else {
+                magicIndicator.classList.remove('active');
+            }
+        }
+
+        /**
+         * 更新调试面板
+         */
+        function updateDebugPanel() {
+            const state = stateManager;
+            const stateNames = ['普通模式', '阶段1: 等待Num2', '阶段2: 等待Num3', '阶段3: 准备揭晓', '最终呈现'];
+            const info = `
+状态: ${stateNames[state.currentState]}
+=== 魔术数据 ===
+Num1: ${state.magicData.num1 || '未记录'}
+Num2: ${state.magicData.num2 || '未记录'}
+Num3: ${state.magicData.num3 || '未记录'}
+Target: ${state.magicData.target || '未计算'}
+=== 计算器状态 ===
+显示: ${state.calculator.displayValue}
+运算符: ${state.calculator.operator || '无'}
+            `.trim();
+            debugPanel.textContent = info;
+        }
+
+        // ============================================
+        // 按钮事件处理
+        // ============================================
+
+        /**
+         * 处理数字按钮点击
+         * @param {string} digit - 数字字符
+         */
+        function handleNumberClick(digit) {
+            const calculator = stateManager.calculator;
+
+            // 正常模式下处理数字输入
+            if (calculator.waitingForOperand) {
+                calculator.currentValue = digit;
+                calculator.waitingForOperand = false;
+            } else {
+                calculator.currentValue = calculator.currentValue === '0' ? digit : calculator.currentValue + digit;
+            }
+
+            // 特殊处理：在 MAGIC_STAGE_2 状态下，检测到输入6位数后立即显示魔术数字
+            if (stateManager.currentState === STATES.MAGIC_STAGE_2) {
+                const currentValue = parseInt(calculator.currentValue);
+                // 当输入到第6位数字时（100000-999999），立即触发魔术数字显示
+                if (currentValue >= 100000 && currentValue <= 999999) {
+                    // 记录 Num3
+                    stateManager.magicData.num3 = currentValue;
+                    stateManager.currentState = STATES.MAGIC_STAGE_3;
+
+                    // 计算目标时间（当前时间 + 10秒）
+                    const target = getTargetTime();
+                    stateManager.magicData.target = target;
+
+                    // 计算魔术数字：Target - Num1 - Num2
+                    const magicNumber = target - stateManager.magicData.num1 - stateManager.magicData.num2;
+
+                    // 立即显示魔术数字（不显示用户输入的6位数）
+                    updateDisplay(magicNumber);
+
+                    calculator.previousValue = magicNumber;
+                    calculator.operator = '+';
+                    calculator.waitingForOperand = true;
+                    highlightOperator('+');
+
+                    console.log('检测到输入6位数:', currentValue);
+                    console.log('Target:', target);
+                    console.log('魔术数字:', magicNumber);
+                    updateDebugPanel();
+                    return;  // 提前返回，不再正常显示
+                }
+            }
+
+            updateDisplay(calculator.currentValue);
+        }
+
+        /**
+         * 处理小数点点击
+         */
+        function handleDecimalClick() {
+            const calculator = stateManager.calculator;
+
+            if (calculator.waitingForOperand) {
+                calculator.currentValue = '0.';
+                calculator.waitingForOperand = false;
+            } else if (!calculator.currentValue.includes('.')) {
+                calculator.currentValue += '.';
+            }
+
+            updateDisplay(calculator.currentValue);
+        }
+
+        /**
+         * 处理运算符点击
+         * @param {string} operator - 运算符（+, -, *, /）
+         */
+        function handleOperatorClick(operator) {
+            const currentState = stateManager.currentState;
+            const calculator = stateManager.calculator;
+            const currentValue = getDisplayNumber();
+
+            // 根据当前状态处理魔术流程
+            switch (currentState) {
+                case STATES.NORMAL_MODE:
+                    // 第一次按 +，记录 Num1
+                    if (operator === '+') {
+                        // 验证是否为 4 位数
+                        if (currentValue >= 1000 && currentValue <= 9999) {
+                            stateManager.magicData.num1 = currentValue;
+                            stateManager.currentState = STATES.MAGIC_STAGE_1;
+                            console.log('记录 Num1:', currentValue);
+                        } else {
+                            console.log('警告：不是 4 位数，继续正常计算');
+                        }
+                    }
+                    break;
+
+                case STATES.MAGIC_STAGE_1:
+                    // 第二次按 +，记录 Num2，显示和
+                    if (operator === '+') {
+                        // 验证是否为 5 位数
+                        if (currentValue >= 10000 && currentValue <= 99999) {
+                            stateManager.magicData.num2 = currentValue;
+                            stateManager.currentState = STATES.MAGIC_STAGE_2;
+
+                            // 显示 Num1 + Num2 的和
+                            const sum = stateManager.magicData.num1 + currentValue;
+                            updateDisplay(sum);
+
+                            calculator.previousValue = sum;
+                            calculator.operator = '+';
+                            calculator.waitingForOperand = true;
+                            highlightOperator(operator);
+
+                            console.log('记录 Num2:', currentValue, '和:', sum);
+                            updateDebugPanel();
+                            return;  // 提前返回
+                        } else {
+                            console.log('警告：不是 5 位数，重置状态');
+                            stateManager.currentState = STATES.NORMAL_MODE;
+                            stateManager.magicData.num1 = null;
+                        }
+                    } else {
+                        // 按 + 以外的运算符，重置状态
+                        stateManager.currentState = STATES.NORMAL_MODE;
+                        stateManager.magicData.num1 = null;
+                    }
+                    break;
+
+                case STATES.MAGIC_STAGE_2:
+                    // 在这个阶段，用户输入6位数字后会自动触发魔术数字显示
+                    // 按运算符会重置状态
+                    if (operator !== '+') {
+                        stateManager.currentState = STATES.NORMAL_MODE;
+                        stateManager.magicData.num1 = null;
+                        stateManager.magicData.num2 = null;
+                    }
+                    break;
+
+                case STATES.MAGIC_STAGE_3:
+                    // 已经进入魔术数字显示阶段，只允许按 = 进行最终呈现
+                    if (operator !== '+') {
+                        stateManager.currentState = STATES.NORMAL_MODE;
+                        stateManager.magicData.num1 = null;
+                        stateManager.magicData.num2 = null;
+                        stateManager.magicData.num3 = null;
+                    }
+                    break;
+            }
+
+            // 正常计算器逻辑（非魔术流程时）
+            if (currentState === STATES.NORMAL_MODE ||
+                (currentState === STATES.MAGIC_STAGE_1 && operator !== '+') ||
+                (currentState === STATES.MAGIC_STAGE_2 && operator !== '+') ||
+                (currentState === STATES.MAGIC_STAGE_3 && operator !== '+')) {
+
+                if (calculator.operator && !calculator.waitingForOperand) {
+                    // 执行之前的运算
+                    const result = performCalculation(calculator.previousValue, currentValue, calculator.operator);
+                    updateDisplay(String(result));
+                    calculator.previousValue = result;
+                } else {
+                    calculator.previousValue = currentValue;
+                }
+
+                calculator.operator = operator;
+                calculator.waitingForOperand = true;
+                highlightOperator(operator);
+            }
+
+            updateMagicIndicator();
+            updateDebugPanel();
+        }
+
+        /**
+         * 执行计算
+         * @param {number} a - 第一个数
+         * @param {number} b - 第二个数
+         * @param {string} operator - 运算符
+         * @returns {number} 计算结果
+         */
+        function performCalculation(a, b, operator) {
+            switch (operator) {
+                case '+': return a + b;
+                case '-': return a - b;
+                case '*': return a * b;
+                case '/': return a / b;
+                default: return b;
+            }
+        }
+
+        /**
+         * 处理等号点击
+         */
+        function handleEqualsClick() {
+            const currentState = stateManager.currentState;
+            const calculator = stateManager.calculator;
+
+            // 最终呈现阶段：按 = 显示 Target
+            if (currentState === STATES.MAGIC_STAGE_3) {
+                const { target } = stateManager.magicData;
+
+                updateDisplay(target);
+                stateManager.currentState = STATES.FINAL_REVEAL;
+
+                console.log('最终结果:', target);
+                updateDebugPanel();
+
+                // 结果持续显示，不自动重置
+                return;
+            }
+
+            // 正常计算逻辑
+            if (calculator.operator && !calculator.waitingForOperand) {
+                const result = performCalculation(calculator.previousValue, getDisplayNumber(), calculator.operator);
+                updateDisplay(String(result));
+                calculator.previousValue = null;
+                calculator.operator = null;
+                calculator.waitingForOperand = true;
+            }
+
+            clearOperatorHighlight();
+            updateDebugPanel();
+        }
+
+        /**
+         * 处理 AC 清除点击
+         */
+        function handleClearClick() {
+            resetCalculator();
+        }
+
+        /**
+         * 处理 +/- 符号切换
+         */
+        function handleSignClick() {
+            const calculator = stateManager.calculator;
+            const currentValue = getDisplayNumber();
+
+            if (currentValue !== 0) {
+                calculator.currentValue = String(-currentValue);
+                updateDisplay(calculator.currentValue);
+            }
+        }
+
+        /**
+         * 处理百分号点击
+         */
+        function handlePercentClick() {
+            const calculator = stateManager.calculator;
+            const currentValue = getDisplayNumber();
+
+            calculator.currentValue = String(currentValue / 100);
+            updateDisplay(calculator.currentValue);
+        }
+
+        // ============================================
+        // 事件监听器绑定
+        // ============================================
+
+        // 数字按钮
+        document.querySelectorAll('.btn.number').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const value = btn.dataset.value;
+                if (value === '.') {
+                    handleDecimalClick();
+                } else {
+                    handleNumberClick(value);
+                }
+            });
+        });
+
+        // 运算符按钮
+        document.querySelectorAll('.btn.operator').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const action = btn.dataset.action;
+                if (action === 'operator') {
+                    handleOperatorClick(btn.dataset.value);
+                } else if (action === 'equals') {
+                    handleEqualsClick();
+                }
+            });
+        });
+
+        // 功能按钮
+        document.querySelectorAll('.btn.function').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const action = btn.dataset.action;
+                switch (action) {
+                    case 'clear':
+                        handleClearClick();
+                        break;
+                    case 'sign':
+                        handleSignClick();
+                        break;
+                    case 'percent':
+                        handlePercentClick();
+                        break;
+                }
+            });
+        });
+
+        // 键盘支持
+        document.addEventListener('keydown', (e) => {
+            const key = e.key;
+
+            if (/[0-9]/.test(key)) {
+                handleNumberClick(key);
+            } else if (key === '.') {
+                handleDecimalClick();
+            } else if (key === '+') {
+                handleOperatorClick('+');
+            } else if (key === '-') {
+                handleOperatorClick('-');
+            } else if (key === '*') {
+                handleOperatorClick('*');
+            } else if (key === '/') {
+                e.preventDefault();
+                handleOperatorClick('/');
+            } else if (key === 'Enter' || key === '=') {
+                handleEqualsClick();
+            } else if (key === 'Escape' || key === 'c' || key === 'C') {
+                handleClearClick();
+            } else if (key === '%') {
+                handlePercentClick();
+            }
+        });
+
+        // 调试模式：双击 AC 按钮快速切换
+        let lastAcClick = 0;
+        document.querySelector('[data-action="clear"]').addEventListener('click', () => {
+            const now = Date.now();
+            if (now - lastAcClick < 300) {
+                debugPanel.classList.toggle('show');
+            }
+            lastAcClick = now;
+        });
+
+        // 初始化
+        updateDebugPanel();
+    </script>
+</body>
+</html>
